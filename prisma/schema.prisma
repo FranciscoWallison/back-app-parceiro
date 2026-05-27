@@ -1,0 +1,380 @@
+// Prisma schema — App Corretor
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================================
+// Auth / Cadastro
+// =====================================================================
+
+enum CorretoraStatus {
+  APROVADA
+  PENDENTE
+  REJEITADA
+}
+
+model Corretora {
+  id             String          @id @default(uuid()) @db.Uuid
+  cnpj           String          @unique @db.VarChar(14)
+  cnpjFormatado  String          @db.VarChar(18)
+  razaoSocial    String          @db.VarChar(200)
+  nomeFantasia   String          @db.VarChar(120)
+  status         CorretoraStatus @default(PENDENTE)
+  susep          String          @db.VarChar(40)
+  email          String          @db.VarChar(160)
+  telefone       String          @db.VarChar(40)
+  cidade         String          @db.VarChar(120)
+  uf             String          @db.VarChar(2)
+  dataCadastro   DateTime
+  dataAprovacao  DateTime?
+
+  users          User[]
+
+  @@map("corretoras")
+}
+
+model User {
+  id             String   @id @default(uuid()) @db.Uuid
+  cpf            String   @unique @db.VarChar(11)
+  nome           String   @db.VarChar(160)
+  email          String   @unique @db.VarChar(160)
+  telefone       String?  @db.VarChar(40)
+  senhaHash      String   @db.VarChar(120)
+  corretoraId    String   @db.Uuid
+  corretora      Corretora @relation(fields: [corretoraId], references: [id])
+  ativo          Boolean  @default(true)
+  criadoEm       DateTime @default(now())
+
+  biometric      BiometricCredential[]
+  revokedTokens  RevokedRefreshToken[]
+  propostas      Proposta[]
+  mensagensContato MensagemContato[]
+  resetTokens    PasswordResetToken[]
+  deviceTokens   DeviceToken[]
+
+  @@index([corretoraId])
+  @@map("users")
+}
+
+model BiometricCredential {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId    String   @db.VarChar(128)
+  deviceName  String?  @db.VarChar(120)
+  tokenHash   String   @db.VarChar(120)
+  criadoEm    DateTime @default(now())
+  ultimoUso   DateTime?
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@map("biometric_credentials")
+}
+
+model RevokedRefreshToken {
+  jti         String   @id @db.Uuid
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revogadoEm  DateTime @default(now())
+  expiraEm    DateTime
+
+  @@index([expiraEm])
+  @@map("revoked_refresh_tokens")
+}
+
+model PasswordResetToken {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token       String   @unique @db.VarChar(64)
+  expiraEm    DateTime
+  usadoEm     DateTime?
+  criadoEm    DateTime @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+enum PushPlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
+model DeviceToken {
+  id          String       @id @default(uuid()) @db.Uuid
+  userId      String       @db.Uuid
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fcmToken    String       @unique @db.VarChar(500)
+  deviceId    String       @db.VarChar(128)
+  deviceName  String?      @db.VarChar(120)
+  platform    PushPlatform @default(ANDROID)
+  ativo       Boolean      @default(true)
+  ultimoUso   DateTime?
+  criadoEm    DateTime     @default(now())
+
+  @@index([userId])
+  @@index([fcmToken])
+  @@map("device_tokens")
+}
+
+// =====================================================================
+// Catálogo de planos
+// =====================================================================
+
+enum TipoPlano {
+  ODONTO
+  SAUDE
+}
+
+model Plano {
+  id                  String    @id @default(uuid()) @db.Uuid
+  codigo              String    @unique @db.VarChar(40)
+  nome                String    @db.VarChar(120)
+  tipo                TipoPlano @default(ODONTO)
+  descricao           String    @db.VarChar(500)
+  valorTitularCents   Int
+  valorDependenteCents Int
+  carenciaMeses       Int       @default(0)
+  ativo               Boolean   @default(true)
+  criadoEm            DateTime  @default(now())
+
+  propostas           Proposta[]
+
+  @@map("planos")
+}
+
+// =====================================================================
+// Propostas (PF + PME) — agregado central
+// =====================================================================
+
+enum TipoProposta {
+  PF
+  PME
+}
+
+enum StatusProposta {
+  RASCUNHO
+  SIMULADA
+  AGUARDANDO_DOCS
+  AGUARDANDO_ASSINATURA
+  AGUARDANDO_PAGAMENTO
+  TRANSMITIDA
+  APROVADA
+  RECUSADA
+  CANCELADA
+}
+
+model Proposta {
+  id                String         @id @default(uuid()) @db.Uuid
+  numero            Int            @unique @default(autoincrement())
+  tipo              TipoProposta
+  status            StatusProposta @default(RASCUNHO)
+  corretorId        String         @db.Uuid
+  corretor          User           @relation(fields: [corretorId], references: [id])
+  planoId           String         @db.Uuid
+  plano             Plano          @relation(fields: [planoId], references: [id])
+  valorTotalCents   Int            @default(0)
+  observacoes       String?        @db.VarChar(1000)
+  criadaEm          DateTime       @default(now())
+  atualizadaEm      DateTime       @updatedAt
+  simuladaEm        DateTime?
+  transmitidaEm    DateTime?
+  aprovadaEm       DateTime?
+  recusadaEm       DateTime?
+  motivoRecusa     String?         @db.VarChar(500)
+
+  titulares         Titular[]
+  empresa           Empresa?
+  documentos        DocumentoProposta[]
+  pagamentos        Pagamento[]
+  assinatura        Assinatura?
+
+  @@index([corretorId])
+  @@index([status])
+  @@map("propostas")
+}
+
+model Titular {
+  id              String       @id @default(uuid()) @db.Uuid
+  propostaId      String       @db.Uuid
+  proposta        Proposta     @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+  cpf             String       @db.VarChar(11)
+  nome            String       @db.VarChar(160)
+  dataNascimento  DateTime
+  email           String       @db.VarChar(160)
+  telefone        String       @db.VarChar(40)
+  cep             String       @db.VarChar(8)
+  logradouro      String       @db.VarChar(200)
+  numero          String       @db.VarChar(20)
+  complemento     String?      @db.VarChar(80)
+  bairro          String       @db.VarChar(120)
+  cidade          String       @db.VarChar(120)
+  uf              String       @db.VarChar(2)
+  declaracaoSaude Json?
+  criadoEm        DateTime     @default(now())
+
+  dependentes     Dependente[]
+
+  @@index([propostaId])
+  @@map("titulares")
+}
+
+model Dependente {
+  id              String   @id @default(uuid()) @db.Uuid
+  titularId       String   @db.Uuid
+  titular         Titular  @relation(fields: [titularId], references: [id], onDelete: Cascade)
+  cpf             String   @db.VarChar(11)
+  nome            String   @db.VarChar(160)
+  dataNascimento  DateTime
+  parentesco      String   @db.VarChar(40)
+  declaracaoSaude Json?
+  criadoEm        DateTime @default(now())
+
+  @@index([titularId])
+  @@map("dependentes")
+}
+
+model Empresa {
+  id              String   @id @default(uuid()) @db.Uuid
+  propostaId      String   @unique @db.Uuid
+  proposta        Proposta @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+  cnpj            String   @db.VarChar(14)
+  razaoSocial     String   @db.VarChar(200)
+  nomeFantasia    String   @db.VarChar(120)
+  emailContato    String   @db.VarChar(160)
+  telefone        String   @db.VarChar(40)
+  cep             String   @db.VarChar(8)
+  logradouro      String   @db.VarChar(200)
+  numero          String   @db.VarChar(20)
+  complemento     String?  @db.VarChar(80)
+  bairro          String   @db.VarChar(120)
+  cidade          String   @db.VarChar(120)
+  uf              String   @db.VarChar(2)
+
+  @@map("empresas")
+}
+
+enum TipoDocumento {
+  RG
+  CNH
+  COMPROVANTE_RESIDENCIA
+  CONTRATO_SOCIAL
+  CARTAO_CNPJ
+  OUTRO
+}
+
+model DocumentoProposta {
+  id              String        @id @default(uuid()) @db.Uuid
+  propostaId      String        @db.Uuid
+  proposta        Proposta      @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+  tipo            TipoDocumento
+  nomeArquivo     String        @db.VarChar(200)
+  urlMock         String        @db.VarChar(400)
+  tamanhoBytes    Int           @default(0)
+  dadosExtraidos  Json?
+  criadoEm        DateTime      @default(now())
+
+  @@index([propostaId])
+  @@map("documentos_proposta")
+}
+
+enum MetodoPagamento {
+  PIX
+  BOLETO
+}
+
+enum StatusPagamento {
+  AGUARDANDO
+  PAGO
+  EXPIRADO
+  CANCELADO
+}
+
+model Pagamento {
+  id              String          @id @default(uuid()) @db.Uuid
+  propostaId      String          @db.Uuid
+  proposta        Proposta        @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+  metodo          MetodoPagamento
+  valorCents      Int
+  status          StatusPagamento @default(AGUARDANDO)
+  qrCodeMock      String?         @db.VarChar(2000)
+  copiaColaMock   String?         @db.VarChar(500)
+  linhaDigitavel  String?         @db.VarChar(80)
+  vencimento      DateTime?
+  pagoEm          DateTime?
+  criadoEm        DateTime        @default(now())
+
+  @@index([propostaId])
+  @@map("pagamentos")
+}
+
+model Assinatura {
+  id          String   @id @default(uuid()) @db.Uuid
+  propostaId  String   @unique @db.Uuid
+  proposta    Proposta @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+  hash        String   @db.VarChar(120)
+  pdfKey      String?  @db.VarChar(400)
+  assinadoEm  DateTime @default(now())
+  ipMock      String?  @db.VarChar(45)
+
+  @@map("assinaturas")
+}
+
+// =====================================================================
+// Telas secundárias
+// =====================================================================
+
+enum TipoMaterial {
+  PDF
+  IMAGEM
+  VIDEO
+  LINK
+}
+
+model MaterialPromocional {
+  id          String       @id @default(uuid()) @db.Uuid
+  titulo      String       @db.VarChar(160)
+  descricao   String       @db.VarChar(500)
+  tipo        TipoMaterial @default(PDF)
+  urlMock     String       @db.VarChar(400)
+  thumbnail   String?      @db.VarChar(400)
+  ordem       Int          @default(0)
+  ativo       Boolean      @default(true)
+  criadoEm    DateTime     @default(now())
+
+  @@map("materiais_promocionais")
+}
+
+model MensagemContato {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assunto     String   @db.VarChar(160)
+  mensagem    String   @db.VarChar(2000)
+  respondida  Boolean  @default(false)
+  criadoEm    DateTime @default(now())
+
+  @@index([userId])
+  @@map("mensagens_contato")
+}
+
+model FaqItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  pergunta    String   @db.VarChar(300)
+  resposta    String   @db.VarChar(2000)
+  categoria   String   @db.VarChar(80)
+  ordem       Int      @default(0)
+  ativo       Boolean  @default(true)
+  criadoEm    DateTime @default(now())
+
+  @@index([categoria, ordem])
+  @@map("faq_items")
+}

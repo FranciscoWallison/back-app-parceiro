@@ -1,0 +1,23 @@
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.vscode
+.idea
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+README.md
+test
+*.test.ts
+*.spec.ts
+Dockerfile
+.dockerignore
+# NÃO ignorar prisma/ (schema + migrations precisam ir para a imagem)
+!prisma/
+!docker-entrypoint.sh

@@ -1,0 +1,171 @@
+name: app-corretor-backend
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  rabbitmq_data:
+
+services:
+  # ============================================================
+  # Backend — NestJS 11 + Swagger
+  # ============================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: app-corretor/backend:latest
+    container_name: app-corretor-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-corretor}:${POSTGRES_PASSWORD:-corretor_dev}@postgres:5432/${POSTGRES_DB:-corretor}
+      REDIS_URL: redis://redis:6379
+      # MinIO (S3 self-hosted)
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://192.168.100.6:9000}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-corretor-docs}
+      # RabbitMQ
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-rabbit}:${RABBITMQ_PASSWORD:-rabbit_dev}@rabbitmq:5672
+      # JWT
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      # Seed idempotente
+      RUN_SEED: ${RUN_SEED:-true}
+      # Mail (MailHog em dev)
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      MAIL_FROM: 'App Corretor <no-reply@app-corretor.local>'
+      # Firebase Cloud Messaging (JSON do service account em base64 ou inline)
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
+      # Simuladores MVP — defina false para desligar individualmente
+      PAGAMENTO_SIMULADOR: ${PAGAMENTO_SIMULADOR:-true}
+      OPERADORA_SIMULADOR: ${OPERADORA_SIMULADOR:-true}
+      CPF_SIMULADOR: ${CPF_SIMULADOR:-true}
+      OCR_SIMULADOR: ${OCR_SIMULADOR:-true}
+      LEMBRETES_SIMULADOR: ${LEMBRETES_SIMULADOR:-true}
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - app-net
+
+  # ============================================================
+  # PostgreSQL 16 — transacional
+  # ============================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: app-corretor-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-corretor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-corretor_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-corretor}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-corretor} -d ${POSTGRES_DB:-corretor}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-net
+
+  # ============================================================
+  # Redis 7 — cache, sessão, rate limit
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: app-corretor-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-net
+
+  # ============================================================
+  # MinIO — S3 self-hosted para documentos
+  # ============================================================
+  minio:
+    image: minio/minio:latest
+    container_name: app-corretor-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-net
+
+  # ============================================================
+  # MailHog — SMTP fake para dev (captura emails, GUI em :8025)
+  # ============================================================
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: app-corretor-mailhog
+    restart: unless-stopped
+    ports:
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"
+      - "${MAILHOG_UI_PORT:-8025}:8025"
+    networks:
+      - app-net
+
+  # ============================================================
+  # RabbitMQ — fila de eventos
+  # ============================================================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: app-corretor-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-rabbit}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-rabbit_dev}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - app-net
