@@ -97,6 +97,56 @@ docker exec app-corretor-postgres psql -U corretor -d corretor -c \
 
 Setar `false` desabilita o respectivo cron/serviço (fica fácil ligar integração real depois sem mexer no código).
 
+## Chat com IA (Gemini Function Calling)
+
+O backend hospeda um proxy `POST /ai/chat` (JWT-auth) que recebe mensagens do
+corretor e usa o Gemini API com **function calling** para criar/consultar/simular
+propostas em linguagem natural.
+
+### Como ligar
+
+1. Obtenha uma chave gratuita em https://aistudio.google.com/apikey
+2. Cole em `GEMINI_API_KEY=...` no `.env`
+3. `docker compose up -d --build backend`
+4. Log deve mostrar `🤖 AiChat ativo: model=gemini-2.5-flash, maxHops=8`
+
+Sem essa env, o `AiChatService` roda em **modo STUB** (responde "configure
+GEMINI_API_KEY"). Útil para devs que não querem subir Gemini local.
+
+### Tools expostas (whitelist)
+
+11 funções tipadas que o LLM pode chamar (em sequência):
+
+| Tool | O que faz |
+|---|---|
+| `listarPlanos` | Catálogo (id, nome, valores) |
+| `validarCpf` | CPF mock + antifraude |
+| `consultarCep` | ViaCEP |
+| `criarPropostaPF` / `criarPropostaPME` | Reutiliza `PropostasService.criar` |
+| `simularProposta` | Avança RASCUNHO → SIMULADA |
+| `listarPropostas` / `detalheProposta` | Consulta |
+| `gerarPagamento` | PIX ou BOLETO |
+| `instruirAnexarDocumento` / `instruirAssinar` | Handoff para UI (câmera, signature) |
+
+**Ações destrutivas (aprovar/recusar/cancelar) NÃO estão na whitelist** — o
+LLM é instruído a recusar e redirecionar para a tela admin.
+
+### Segurança
+
+- JWT obrigatório (reusa `JwtAuthGuard`).
+- Throttler: 10 req/min por usuário em `POST /ai/chat`.
+- Anonymizer no free tier: `GEMINI_TIER=free` mascara CPF/CNPJ/email/telefone
+  antes de enviar texto para o Gemini (Google pode usar prompts free para
+  treino). Em `paid`, passa literal.
+- Retry com backoff 1s/2s/4s para 429/503.
+- Limite de 8 hops por conversa.
+
+### Custos (Gemini 2.5 Flash)
+
+- Free: 1.500 req/dia, 1M tokens/min — cobre demo + dev.
+- Pago: ~US$5-23/mês para 10 usuários × 5 conversas/dia (estimativa do case
+  agendaAI). Ver [F:\projetos\Estudos--mobile\dicas\case-agendaai-ia-pediatria.md](F:\projetos\Estudos--mobile\dicas\case-agendaai-ia-pediatria.md).
+
 ## Configurar Firebase Cloud Messaging (push)
 
 1. https://console.firebase.google.com → seu projeto → ⚙ Settings → Service Accounts → **Generate new private key**
