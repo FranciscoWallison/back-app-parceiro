@@ -177,6 +177,33 @@ mostra um `AlertController` antes de executar.
 - Pago: ~US$5-23/mês para 10 usuários × 5 conversas/dia (estimativa do case
   agendaAI). Ver [F:\projetos\Estudos--mobile\dicas\case-agendaai-ia-pediatria.md](F:\projetos\Estudos--mobile\dicas\case-agendaai-ia-pediatria.md).
 
+## Voz no chat (STT Azure)
+
+O backend expõe `POST /ai/speech/token` (JWT-auth) que devolve um **token Azure
+Cognitive Services efêmero (10min)** para o frontend usar STT via WebSocket
+sem nunca tocar a chave Azure.
+
+### Como ligar
+
+1. Portal Azure → criar recurso "Speech" (ou "AI Foundry" multi-service) — região `eastus` / `brazilsouth`
+2. Copiar **KEY 1** para `AZURE_SPEECH_KEY=...` no `.env`
+3. `docker compose up -d --force-recreate backend` (não basta `restart`)
+4. Log mostra `🎤 Speech ativo: region=eastus`. Sem essa env, o endpoint retorna 503.
+
+### Segurança
+
+- Chave Azure mora apenas no `.env` do backend, NUNCA no APK.
+- Token efêmero (10min) — se vazar, expira.
+- Cache de 9min no service evita chamar issueToken a cada toque no mic.
+- Throttle: 30 req/min por usuário.
+
+### Custos
+
+- ~US$1/h de áudio reconhecido (free tier: 5h/mês).
+- Estimativa real: 10 usuários × 5 conversas/dia × 30s ≈ **US$12/mês**.
+
+Detalhes completos em [doc/VOICE.md](../doc/VOICE.md).
+
 ## Configurar Firebase Cloud Messaging (push)
 
 1. https://console.firebase.google.com → seu projeto → ⚙ Settings → Service Accounts → **Generate new private key**

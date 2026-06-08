@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AiChatModule } from './ai/ai-chat.module';
+import { SpeechModule } from './ai/speech/speech.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -47,6 +48,7 @@ import { UsersModule } from './users/users.module';
     ContatoModule,
     FaqModule,
     AiChatModule,
+    SpeechModule,
   ],
   controllers: [AppController],
   providers: [
