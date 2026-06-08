@@ -38,7 +38,11 @@ cotação → documentos → assinatura → pagamento → transmissão → anál
 ```bash
 cp .env.example .env
 ```
-Edite `.env` com seus secrets — principalmente `JWT_*_SECRET` e (opcional para push) `FIREBASE_SERVICE_ACCOUNT`.
+Edite `.env` com seus secrets — principalmente:
+- `JWT_*_SECRET` — obrigatório
+- `TZ=America/Sao_Paulo` — Node respeita; também é repassado ao Gemini para interpretar "amanhã", "próxima segunda" no fuso correto
+- `GEMINI_API_KEY` — opcional (sem isso, o chat IA roda em modo STUB)
+- `FIREBASE_SERVICE_ACCOUNT` — opcional (para push notifications)
 
 ### 3. Subir stack
 ```bash
@@ -115,7 +119,12 @@ GEMINI_API_KEY"). Útil para devs que não querem subir Gemini local.
 
 ### Tools expostas (whitelist)
 
-11 funções tipadas que o LLM pode chamar (em sequência):
+20 funções tipadas que o LLM pode chamar (em sequência). Divididas em **tools
+de backend** (mudam estado / consultam dados) e **tools de UI / handoff** (o
+backend só retorna um descritor `{ handoff: { kind, ... } }` e o frontend
+executa via `ChatHandoffResolver`).
+
+**Backend (10):**
 
 | Tool | O que faz |
 |---|---|
@@ -126,10 +135,31 @@ GEMINI_API_KEY"). Útil para devs que não querem subir Gemini local.
 | `simularProposta` | Avança RASCUNHO → SIMULADA |
 | `listarPropostas` / `detalheProposta` | Consulta |
 | `gerarPagamento` | PIX ou BOLETO |
-| `instruirAnexarDocumento` / `instruirAssinar` | Handoff para UI (câmera, signature) |
+| `instruirAnexarDocumento` | Handoff `OPEN_CAMERA` (frontend abre câmera + faz upload) |
+| `instruirAssinar` | Handoff `OPEN_SIGNATURE_MODAL` (modal de assinatura) |
+
+**UI / handoff (9):**
+
+| Tool | Handoff retornado | Ação do frontend |
+|---|---|---|
+| `abrirPropostaPorId` | `OPEN_PROPOSTA_DETALHE` | Router para `/propostas/:id` |
+| `abrirPropostaPorNumero` | `OPEN_PROPOSTA_DETALHE` | Resolve id por número, depois navega |
+| `abrirNovaPropostaPF` | `OPEN_WIZARD_PF` | Router para `/propostas/nova-pf` |
+| `abrirNovaPropostaPME` | `OPEN_WIZARD_PME` | Router para `/propostas/nova-pme` |
+| `abrirListaPropostas` | `OPEN_LISTA_PROPOSTAS` | Router para `/propostas` com queryParams |
+| `abrirPainelAdmin` | `OPEN_ADMIN` | Router para `/admin/propostas` |
+| `abrirPerfil` | `OPEN_PERFIL` | Router para `/perfil` + fragment opcional |
+| `exibirToast` | `SHOW_TOAST` | `ToastController` 3s |
+| `realizarLogout` | `DO_LOGOUT` | Confirmação + `AuthService.logout()` |
+
+Detalhes completos do protocolo de handoff em [doc/HANDOFFS.md](../doc/HANDOFFS.md).
 
 **Ações destrutivas (aprovar/recusar/cancelar) NÃO estão na whitelist** — o
 LLM é instruído a recusar e redirecionar para a tela admin.
+
+**Ações que mexem em hardware (câmera, modal de assinatura) ou destrutivas
+(logout)** pedem confirmação dupla: o LLM confirma em texto + o frontend
+mostra um `AlertController` antes de executar.
 
 ### Segurança
 

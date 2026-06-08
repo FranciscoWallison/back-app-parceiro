@@ -53,6 +53,14 @@ services:
       CPF_SIMULADOR: ${CPF_SIMULADOR:-true}
       OCR_SIMULADOR: ${OCR_SIMULADOR:-true}
       LEMBRETES_SIMULADOR: ${LEMBRETES_SIMULADOR:-true}
+      # Fuso horário — Node respeita TZ automaticamente; usado pela IA
+      TZ: ${TZ:-America/Sao_Paulo}
+      # IA / Gemini (chat conversacional via proxy)
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_TIER: ${GEMINI_TIER:-free}
+      AI_CHAT_MAX_HOPS: ${AI_CHAT_MAX_HOPS:-8}
+      AI_CHAT_MAX_TOKENS: ${AI_CHAT_MAX_TOKENS:-2000}
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     depends_on:

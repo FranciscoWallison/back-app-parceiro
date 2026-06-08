@@ -218,6 +218,106 @@ export const TOOLS: FunctionDeclaration[] = [
       },
     },
   },
+
+  // ===========================================================================
+  // Tools de NAVEGAÇÃO E EVENTOS DE UI (handoffs).
+  // Estas tools NÃO mudam estado de negócio — só retornam um descriptor
+  // { handoff: { kind, ... } } que o frontend (ChatHandoffResolver) executa.
+  // ===========================================================================
+  {
+    name: 'abrirPropostaPorId',
+    description:
+      'Abre o detalhe de uma proposta no app, dado seu UUID. Prefira esta tool sobre detalheProposta quando o usuário quiser VER no app (não apenas listar dados).',
+    parameters: {
+      type: Type.OBJECT,
+      required: ['propostaId'],
+      properties: {
+        propostaId: { type: Type.STRING, description: 'UUID da proposta.' },
+      },
+    },
+  },
+  {
+    name: 'abrirPropostaPorNumero',
+    description:
+      'Abre o detalhe de uma proposta pelo seu número curto (ex: 1024). Use quando o usuário disser "abre a #1024" ou "mostra a proposta 1024".',
+    parameters: {
+      type: Type.OBJECT,
+      required: ['numero'],
+      properties: {
+        numero: { type: Type.INTEGER, description: 'Número curto da proposta (campo "numero" na DB).' },
+      },
+    },
+  },
+  {
+    name: 'abrirNovaPropostaPF',
+    description:
+      'Navega o app para o wizard de criar proposta Pessoa Física (5 passos). Use quando o usuário quiser PREENCHER manualmente em vez de pedir pra IA criar pela conversa.',
+    parameters: { type: Type.OBJECT, properties: {} },
+  },
+  {
+    name: 'abrirNovaPropostaPME',
+    description:
+      'Navega o app para o wizard de criar proposta PME (4 passos). Idem: use quando o usuário quiser preencher manualmente.',
+    parameters: { type: Type.OBJECT, properties: {} },
+  },
+  {
+    name: 'abrirListaPropostas',
+    description:
+      'Navega o app para a lista de propostas, opcionalmente com filtros pré-aplicados de status ou tipo. Use quando o usuário pedir "mostra minhas propostas aguardando documentos", "ver tudo PF", etc.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        filtroStatus: {
+          type: Type.STRING,
+          description:
+            'Status do filtro: RASCUNHO | SIMULADA | AGUARDANDO_DOCS | AGUARDANDO_ASSINATURA | AGUARDANDO_PAGAMENTO | TRANSMITIDA | APROVADA | RECUSADA | CANCELADA',
+        },
+        filtroTipo: { type: Type.STRING, description: 'PF | PME' },
+      },
+    },
+  },
+  {
+    name: 'abrirPainelAdmin',
+    description:
+      'Navega o app para o painel administrativo (lista de propostas TRANSMITIDAs aguardando aprovação manual).',
+    parameters: { type: Type.OBJECT, properties: {} },
+  },
+  {
+    name: 'abrirPerfil',
+    description:
+      'Navega o app para a tela de perfil. Pode focar em uma seção específica passando "focar".',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        focar: {
+          type: Type.STRING,
+          description: 'Seção do perfil para rolar até: biometria | push',
+        },
+      },
+    },
+  },
+  {
+    name: 'exibirToast',
+    description:
+      'Mostra um toast nativo na parte de baixo do app com uma mensagem curta. Use para feedback rápido — NÃO use para informações longas ou confirmações.',
+    parameters: {
+      type: Type.OBJECT,
+      required: ['mensagem'],
+      properties: {
+        mensagem: { type: Type.STRING, description: 'Texto do toast (máx ~80 chars).' },
+        tone: {
+          type: Type.STRING,
+          description: 'Cor do toast: success | warning | danger | info (default: info).',
+        },
+      },
+    },
+  },
+  {
+    name: 'realizarLogout',
+    description:
+      'Encerra a sessão do corretor e volta para a tela de login. Ação DESTRUTIVA — confirme em texto com o usuário antes de chamar ("Posso te deslogar?").',
+    parameters: { type: Type.OBJECT, properties: {} },
+  },
 ];
 
 /** Whitelist de nomes — qualquer functionCall com nome fora disto é REJEITADA. */

@@ -171,10 +171,8 @@ export class ToolDispatcher {
           const tipoStr = String(args.tipoDocumento ?? 'RG').toUpperCase();
           if (!id) return { erro: 'propostaId obrigatório.' };
           return {
-            instrucao: `Abra a proposta #${id} no app e, na seção "Próximos passos", toque em "Tirar foto / escolher imagem" depois de selecionar o tipo "${tipoStr as TipoDocumento}". O OCR vai extrair os dados automaticamente.`,
-            propostaId: id,
-            tipoDocumento: tipoStr,
-            handoff: 'OPEN_PROPOSTA_DETALHE',
+            instrucao: `Vou abrir a câmera para você anexar o documento "${tipoStr as TipoDocumento}" na proposta #${id}. O OCR extrai os dados automaticamente.`,
+            handoff: { kind: 'OPEN_CAMERA', propostaId: id, tipoDocumento: tipoStr },
           };
         }
 
@@ -182,11 +180,103 @@ export class ToolDispatcher {
           const id = String(args.propostaId ?? '');
           if (!id) return { erro: 'propostaId obrigatório.' };
           return {
-            instrucao: `Abra a proposta #${id} no app. Em "Próximos passos", toque em "Abrir tela de assinatura" e assine no canvas com o dedo.`,
-            propostaId: id,
-            handoff: 'OPEN_SIGNATURE_MODAL',
+            instrucao: `Vou abrir a tela de assinatura da proposta #${id}. Assine no canvas com o dedo.`,
+            handoff: { kind: 'OPEN_SIGNATURE_MODAL', propostaId: id },
           };
         }
+
+        // -----------------------------------------------------------------
+        // Tools de NAVEGAÇÃO E EVENTOS DE UI — retornam handoff descriptor.
+        // Frontend ChatHandoffResolver executa a ação (router, toast, etc).
+        // -----------------------------------------------------------------
+        case 'abrirPropostaPorId': {
+          const id = String(args.propostaId ?? '');
+          if (!id) return { erro: 'propostaId obrigatório.' };
+          return {
+            instrucao: `Abrindo a proposta #${id} no app…`,
+            handoff: { kind: 'OPEN_PROPOSTA_DETALHE', propostaId: id },
+          };
+        }
+
+        case 'abrirPropostaPorNumero': {
+          const num = Number(args.numero ?? NaN);
+          if (!Number.isInteger(num) || num <= 0) {
+            return { erro: 'numero inválido — informe o número curto da proposta (inteiro positivo).' };
+          }
+          const lista = await this.propostas.listar(corretorId, {});
+          const achada = lista.find((p) => p.numero === num);
+          if (!achada) {
+            return { erro: `Não encontrei nenhuma proposta com número ${num} para este corretor.` };
+          }
+          return {
+            instrucao: `Abrindo #${achada.numero} (${achada.titularOuEmpresa})…`,
+            handoff: { kind: 'OPEN_PROPOSTA_DETALHE', propostaId: achada.id },
+          };
+        }
+
+        case 'abrirNovaPropostaPF':
+          return {
+            instrucao: 'Abrindo o wizard de Pessoa Física…',
+            handoff: { kind: 'OPEN_WIZARD_PF' },
+          };
+
+        case 'abrirNovaPropostaPME':
+          return {
+            instrucao: 'Abrindo o wizard de PME…',
+            handoff: { kind: 'OPEN_WIZARD_PME' },
+          };
+
+        case 'abrirListaPropostas': {
+          const filtroStatus = args.filtroStatus ? String(args.filtroStatus) : undefined;
+          const filtroTipo = args.filtroTipo ? String(args.filtroTipo) : undefined;
+          const partes: string[] = [];
+          if (filtroTipo) partes.push(`tipo ${filtroTipo}`);
+          if (filtroStatus) partes.push(`status ${filtroStatus}`);
+          const filtros = partes.length ? ` (${partes.join(', ')})` : '';
+          return {
+            instrucao: `Abrindo a lista de propostas${filtros}…`,
+            handoff: {
+              kind: 'OPEN_LISTA_PROPOSTAS',
+              filtroStatus,
+              filtroTipo,
+            },
+          };
+        }
+
+        case 'abrirPainelAdmin':
+          return {
+            instrucao: 'Abrindo o painel administrativo…',
+            handoff: { kind: 'OPEN_ADMIN' },
+          };
+
+        case 'abrirPerfil': {
+          const focar = args.focar ? String(args.focar) : undefined;
+          return {
+            instrucao: focar
+              ? `Abrindo seu perfil na seção "${focar}"…`
+              : 'Abrindo seu perfil…',
+            handoff: { kind: 'OPEN_PERFIL', focar },
+          };
+        }
+
+        case 'exibirToast': {
+          const mensagem = String(args.mensagem ?? '').trim();
+          if (!mensagem) return { erro: 'mensagem obrigatória.' };
+          const toneRaw = String(args.tone ?? 'info').toLowerCase();
+          const tone = ['success', 'warning', 'danger', 'info'].includes(toneRaw)
+            ? toneRaw
+            : 'info';
+          return {
+            instrucao: 'Toast exibido.',
+            handoff: { kind: 'SHOW_TOAST', mensagem, tone },
+          };
+        }
+
+        case 'realizarLogout':
+          return {
+            instrucao: 'Vou pedir confirmação antes de te deslogar.',
+            handoff: { kind: 'DO_LOGOUT' },
+          };
 
         default:
           return { erro: `Tool '${name}' não implementada.` };
