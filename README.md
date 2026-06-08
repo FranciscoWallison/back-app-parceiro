@@ -154,6 +154,8 @@ executa via `ChatHandoffResolver`).
 
 Detalhes completos do protocolo de handoff em [doc/HANDOFFS.md](../doc/HANDOFFS.md).
 
+**Mensagens prontas para o chat** (PF, PME, voz conversacional, dados de teste) em [doc/EXEMPLOS-CHAT-IA.md](../doc/EXEMPLOS-CHAT-IA.md).
+
 **Ações destrutivas (aprovar/recusar/cancelar) NÃO estão na whitelist** — o
 LLM é instruído a recusar e redirecionar para a tela admin.
 
